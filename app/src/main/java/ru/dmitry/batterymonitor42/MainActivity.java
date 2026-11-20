@@ -1,156 +1,69 @@
 package ru.dmitry.batterymonitor42;
 
-import android.app.Activity;
-import android.os.Bundle;
-import android.os.BatteryManager;
+import android.Manifest;
+import android.app.*;
+import android.os.*;
 import android.content.*;
+import android.content.pm.PackageManager;
 import android.graphics.*;
 import android.graphics.drawable.GradientDrawable;
 import android.view.*;
 import android.widget.*;
-import java.util.Locale;
+import java.util.*;
+import java.text.SimpleDateFormat;
 
 public class MainActivity extends Activity {
-    TextView percent, status, temp, voltage, current, technology, health, capacity;
-    BatteryView batteryView;
-    BroadcastReceiver receiver = new BroadcastReceiver() {
-        @Override public void onReceive(Context c, Intent i) { update(i); }
-    };
+    static final int BG=0xff080b12, PANEL=0xff141a24, PANEL2=0xff1b2431, TEXT=0xfff4f6fb, MUTED=0xff8d99aa, GREEN=0xff83e2b2, BLUE=0xff91b9ff, ORANGE=0xffffbd75, RED=0xffff777d;
+    LinearLayout root, content, nav;
+    TextView pct,status,temp,voltage,current,health,source,tech,cycles,eta,healthScore;
+    BatteryRing ring;
+    BatteryManager bm;
+    Intent batteryIntent;
+    int level=0, temperature=-1, millivolts=-1, microamps=Integer.MIN_VALUE, healthCode=1, plug=0, batteryStatus=1;
+    ArrayList<Integer> history=new ArrayList<>();
+    String page="Обзор";
+    android.content.SharedPreferences prefs;
 
-    @Override public void onCreate(Bundle b) {
-        super.onCreate(b);
-        getWindow().setStatusBarColor(Color.rgb(12,18,32));
-        getWindow().setNavigationBarColor(Color.rgb(12,18,32));
-        getWindow().getDecorView().setSystemUiVisibility(0);
-        buildUi();
-        IntentFilter f = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
-        Intent i = registerReceiver(receiver, f);
-        if (i != null) update(i);
+    BroadcastReceiver receiver=new BroadcastReceiver(){@Override public void onReceive(Context c,Intent i){batteryIntent=i;readBattery(i);}};
+    @Override public void onCreate(Bundle b){super.onCreate(b);getWindow().setStatusBarColor(BG);getWindow().setNavigationBarColor(BG);getWindow().getDecorView().setSystemUiVisibility(0);bm=(BatteryManager)getSystemService(BATTERY_SERVICE);prefs=getSharedPreferences("battery42",MODE_PRIVATE);loadHistory();buildShell();batteryIntent=registerReceiver(receiver,new IntentFilter(Intent.ACTION_BATTERY_CHANGED));if(batteryIntent!=null)readBattery(batteryIntent);}
+    int dp(float v){return (int)(v*getResources().getDisplayMetrics().density+.5f);}
+    GradientDrawable shape(int color,int radius,int stroke){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(radius));if(stroke!=0)d.setStroke(dp(1),stroke);return d;}
+    TextView label(String s,int size,int color,boolean bold){TextView t=new TextView(this);t.setText(s);t.setTextSize(size);t.setTextColor(color);if(bold)t.setTypeface(null,1);return t;}
+    LinearLayout column(){LinearLayout l=new LinearLayout(this);l.setOrientation(1);return l;}
+    LinearLayout row(){LinearLayout l=new LinearLayout(this);l.setOrientation(0);l.setGravity(Gravity.CENTER_VERTICAL);return l;}
+    LinearLayout panel(){LinearLayout p=column();p.setPadding(dp(17),dp(16),dp(17),dp(16));p.setBackground(shape(PANEL,22,0xff222b39));LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.bottomMargin=dp(13);p.setLayoutParams(lp);return p;}
+    void buildShell(){root=column();root.setBackgroundColor(BG);root.setPadding(dp(20),dp(18),dp(20),dp(8));LinearLayout head=row();TextView brand=label("BATTERY",13,MUTED,true);TextView mark=label("  /  42",13,GREEN,true);head.addView(brand);head.addView(mark);head.addView(new View(this),new LinearLayout.LayoutParams(0,1,1));TextView live=label("● LIVE",11,GREEN,true);head.addView(live);root.addView(head);
+        TextView heading=label("Энергия под контролем",25,TEXT,true);LinearLayout.LayoutParams hp=new LinearLayout.LayoutParams(-1,-2);hp.topMargin=dp(17);hp.bottomMargin=dp(4);root.addView(heading,hp);
+        TextView sub=label("Мониторинг аккумулятора в реальном времени",12,MUTED,false);root.addView(sub);
+        ScrollView scroll=new ScrollView(this);scroll.setFillViewport(false);content=column();content.setPadding(0,dp(18),0,dp(10));scroll.addView(content);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        nav=row();nav.setPadding(dp(5),dp(7),dp(5),dp(7));nav.setBackground(shape(PANEL,20,0xff222b39));String[] tabs={"Обзор","История","Состояние","Советы"};for(String s:tabs){TextView t=label(s,11,s.equals(page)?GREEN:MUTED,true);t.setGravity(Gravity.CENTER);t.setPadding(dp(7),dp(12),dp(7),dp(12));nav.addView(t,new LinearLayout.LayoutParams(0,-2,1));t.setOnClickListener(v->{page=s;buildPage();for(int j=0;j<nav.getChildCount();j++){TextView x=(TextView)nav.getChildAt(j);x.setTextColor(x.getText().toString().equals(page)?GREEN:MUTED);}});}root.addView(nav);setContentView(root);buildPage();}
+    void buildPage(){content.removeAllViews();if(page.equals("Обзор"))overview();else if(page.equals("История"))historyPage();else if(page.equals("Состояние"))healthPage();else tipsPage();}
+    void overview(){LinearLayout hero=panel();hero.setGravity(Gravity.CENTER_HORIZONTAL);TextView cap=label("ТЕКУЩИЙ ЗАРЯД",10,MUTED,true);hero.addView(cap);ring=new BatteryRing();LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(dp(180),dp(180));rp.topMargin=dp(7);hero.addView(ring,rp);pct=label(level+"%",39,TEXT,true);hero.addView(pct);status=label(statusText(),13,GREEN,true);LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(-2,-2);sp.topMargin=dp(5);hero.addView(status);eta=label(" ",12,MUTED,false);LinearLayout.LayoutParams ep=new LinearLayout.LayoutParams(-2,-2);ep.topMargin=dp(10);hero.addView(eta);content.addView(hero);
+        TextView section=label("Показатели",17,TEXT,true);section.setPadding(dp(2),dp(5),0,dp(10));content.addView(section);
+        LinearLayout r1=row();r1.addView(metric("Температура",tempText(), "°C"),new LinearLayout.LayoutParams(0,-2,1));r1.addView(metric("Напряжение",voltageText(),"V"),new LinearLayout.LayoutParams(0,-2,1));content.addView(r1);
+        LinearLayout r2=row();r2.addView(metric("Ток",currentText(),"mA"),new LinearLayout.LayoutParams(0,-2,1));r2.addView(metric("Источник",sourceText(),"POWER"),new LinearLayout.LayoutParams(0,-2,1));content.addView(r2);
+        LinearLayout p=panel();p.addView(label("ДИНАМИКА ЗАРЯДА",10,MUTED,true));TextView desc=label("Последние изменения уровня",12,MUTED,false);desc.setPadding(0,dp(5),0,dp(7));p.addView(desc);p.addView(new HistoryChart(),new LinearLayout.LayoutParams(-1,dp(115)));content.addView(p);
+        LinearLayout insight=panel();insight.addView(label("СЕЙЧАС",10,GREEN,true));insight.addView(label(advice(),15,TEXT,true));insight.addView(label("Показания обновляются автоматически при изменении состояния батареи.",12,MUTED,false));content.addView(insight);
     }
-
-    void buildUi() {
-        ScrollView scroll = new ScrollView(this);
-        scroll.setBackgroundColor(Color.rgb(12,18,32));
-        LinearLayout page = new LinearLayout(this);
-        page.setPadding(dp(20), dp(28), dp(20), dp(24));
-        page.setOrientation(LinearLayout.VERTICAL);
-        scroll.addView(page);
-        TextView title = text("МОНИТОР АККУМУЛЯТОРА", 20, Color.WHITE, true);
-        page.addView(title);
-        TextView subtitle = text("Проект №42 • состояние и зарядка", 13, 0xff9aa9c2, false);
-        page.addView(subtitle);
-
-        LinearLayout hero = card();
-        hero.setGravity(Gravity.CENTER);
-        hero.setPadding(dp(16),dp(18),dp(16),dp(18));
-        batteryView = new BatteryView();
-        hero.addView(batteryView, new LinearLayout.LayoutParams(-1, dp(145)));
-        percent = text("--%", 42, Color.WHITE, true);
-        percent.setGravity(Gravity.CENTER);
-        hero.addView(percent);
-        status = text("Получение данных…", 14, 0xff54d6a0, true);
-        status.setGravity(Gravity.CENTER);
-        hero.addView(status);
-        page.addView(hero);
-
-        TextView h = text("ПАРАМЕТРЫ АККУМУЛЯТОРА", 13, 0xff9aa9c2, true);
-        h.setPadding(2,dp(22),0,dp(8)); page.addView(h);
-        LinearLayout row1 = new LinearLayout(this);
-        row1.addView(tile("ТЕМПЕРАТУРА", "-- °C"), new LinearLayout.LayoutParams(0,dp(100),1));
-        row1.addView(tile("НАПРЯЖЕНИЕ", "-- В"), new LinearLayout.LayoutParams(0,dp(100),1));
-        page.addView(row1);
-        LinearLayout row2 = new LinearLayout(this);
-        row2.addView(tile("ТОК ЗАРЯДКИ", "Нет данных"), new LinearLayout.LayoutParams(0,dp(100),1));
-        row2.addView(tile("СОСТОЯНИЕ", "--"), new LinearLayout.LayoutParams(0,dp(100),1));
-        page.addView(row2);
-        LinearLayout row3 = new LinearLayout(this);
-        row3.addView(tile("ТИП ПОДКЛЮЧЕНИЯ", "--"), new LinearLayout.LayoutParams(0,dp(100),1));
-        row3.addView(tile("ТЕХНОЛОГИЯ", "--"), new LinearLayout.LayoutParams(0,dp(100),1));
-        page.addView(row3);
-
-        TextView note = text("Примечание: Android показывает только те параметры батареи, которые предоставляет производитель устройства. Точный процент износа и ёмкость могут быть недоступны.", 12, 0xff9aa9c2, false);
-        note.setPadding(dp(4),dp(18),dp(4),0); page.addView(note);
-        setContentView(scroll);
-    }
-
-    View tile(String label, String value) {
-        LinearLayout box = card();
-        box.setPadding(dp(14),dp(14),dp(8),dp(10));
-        TextView l = text(label, 10, 0xff8fa1bd, true);
-        TextView v = text(value, 18, Color.WHITE, true);
-        box.addView(l); box.addView(v);
-        v.setTag(label);
-        if (label.equals("ТЕМПЕРАТУРА")) temp=v;
-        if (label.equals("НАПРЯЖЕНИЕ")) voltage=v;
-        if (label.equals("ТОК ЗАРЯДКИ")) current=v;
-        if (label.equals("СОСТОЯНИЕ")) health=v;
-        if (label.equals("ТИП ПОДКЛЮЧЕНИЯ")) capacity=v;
-        if (label.equals("ТЕХНОЛОГИЯ")) technology=v;
-        return box;
-    }
-
-    void update(Intent i) {
-        int level=i.getIntExtra(BatteryManager.EXTRA_LEVEL,-1);
-        int scale=i.getIntExtra(BatteryManager.EXTRA_SCALE,100);
-        int pct=(level>=0 && scale>0)? Math.round(level*100f/scale):0;
-        percent.setText(pct+"%");
-        batteryView.setLevel(pct);
-        int st=i.getIntExtra(BatteryManager.EXTRA_STATUS,-1);
-        boolean charging=st==BatteryManager.BATTERY_STATUS_CHARGING || st==BatteryManager.BATTERY_STATUS_FULL;
-        status.setText(st==BatteryManager.BATTERY_STATUS_FULL?"Полностью заряжен":charging?"Идёт зарядка":"Работает от аккумулятора");
-        int t=i.getIntExtra(BatteryManager.EXTRA_TEMPERATURE,-1);
-        temp.setText(t>=0?String.format(Locale.getDefault(),"%.1f °C",t/10f):"Нет данных");
-        int v=i.getIntExtra(BatteryManager.EXTRA_VOLTAGE,-1);
-        voltage.setText(v>0?String.format(Locale.getDefault(),"%.2f В",v/1000f):"Нет данных");
-        int healthCode=i.getIntExtra(BatteryManager.EXTRA_HEALTH,-1);
-        String hs="Неизвестно";
-        if(healthCode==BatteryManager.BATTERY_HEALTH_GOOD) hs="Хорошее";
-        else if(healthCode==BatteryManager.BATTERY_HEALTH_OVERHEAT) hs="Перегрев";
-        else if(healthCode==BatteryManager.BATTERY_HEALTH_DEAD) hs="Неисправно";
-        else if(healthCode==BatteryManager.BATTERY_HEALTH_OVER_VOLTAGE) hs="Перенапряжение";
-        else if(healthCode==BatteryManager.BATTERY_HEALTH_COLD) hs="Переохлаждение";
-        health.setText(hs);
-        int plug=i.getIntExtra(BatteryManager.EXTRA_PLUGGED,0);
-        String ps=plug==BatteryManager.BATTERY_PLUGGED_USB?"USB":plug==BatteryManager.BATTERY_PLUGGED_AC?"Сеть":plug==BatteryManager.BATTERY_PLUGGED_WIRELESS?"Беспроводная":"Не подключено";
-        capacity.setText(ps);
-        technology.setText(i.getStringExtra(BatteryManager.EXTRA_TECHNOLOGY)!=null?i.getStringExtra(BatteryManager.EXTRA_TECHNOLOGY):"Неизвестно");
-        BatteryManager bm=(BatteryManager)getSystemService(BATTERY_SERVICE);
-        int microA=bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW);
-        current.setText(microA==Integer.MIN_VALUE?"Нет данных":String.format(Locale.getDefault(),"%.0f мА",Math.abs(microA)/1000f));
-    }
-
-    LinearLayout card() {
-        LinearLayout l=new LinearLayout(this);
-        l.setOrientation(LinearLayout.VERTICAL);
-        l.setBackground(round(0xff1b2940,18));
-        LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);
-        p.setMargins(0,dp(14),0,0); l.setLayoutParams(p);
-        return l;
-    }
-    GradientDrawable round(int color,int radius) {
-        GradientDrawable d=new GradientDrawable(); d.setColor(color); d.setCornerRadius(dp(radius)); return d;
-    }
-    TextView text(String s,int size,int color,boolean bold) {
-        TextView v=new TextView(this); v.setText(s); v.setTextSize(size); v.setTextColor(color);
-        if(bold)v.setTypeface(null,1); return v;
-    }
-    int dp(float x){return (int)(x*getResources().getDisplayMetrics().density+0.5f);}
-    @Override protected void onDestroy(){try{unregisterReceiver(receiver);}catch(Exception ignored){} super.onDestroy();}
-
-    class BatteryView extends View {
-        Paint p=new Paint(3); int level=0;
-        BatteryView(){super(MainActivity.this);}
-        void setLevel(int x){level=x;invalidate();}
-        @Override protected void onDraw(Canvas c){
-            super.onDraw(c); float w=getWidth(), h=getHeight();
-            float bw=Math.min(w*.52f,dp(190)), bh=dp(75), x=(w-bw)/2, y=(h-bh)/2;
-            p.setColor(0xff34445f);p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(dp(4));
-            RectF r=new RectF(x,y,x+bw,y+bh);c.drawRoundRect(r,dp(12),dp(12),p);
-            p.setStyle(Paint.Style.FILL);p.setColor(0xff34445f);
-            c.drawRoundRect(x+bw+dp(3),y+bh*.32f,x+bw+dp(11),y+bh*.68f,dp(3),dp(3),p);
-            p.setColor(level<=15?0xffff6b6b:0xff54d6a0);
-            RectF fill=new RectF(x+dp(6),y+dp(6),x+dp(6)+(bw-dp(12))*level/100f,y+bh-dp(6));
-            c.drawRoundRect(fill,dp(7),dp(7),p);
-        }
-    }
+    View metric(String name,String value,String unit){LinearLayout c=panel();c.setPadding(dp(14),dp(14),dp(12),dp(14));TextView n=label(name.toUpperCase(Locale.ROOT),10,MUTED,true);TextView v=label(value,21,TEXT,true);TextView u=label(unit,10,MUTED,false);c.addView(n);LinearLayout rr=row();rr.addView(v);rr.addView(u);rr.setGravity(Gravity.BOTTOM);c.addView(rr);return c;}
+    void historyPage(){LinearLayout p=panel();p.addView(label("История заряда",21,TEXT,true));p.addView(label("Локальные измерения, сохранённые на этом телефоне",12,MUTED,false));p.addView(new HistoryChart(),new LinearLayout.LayoutParams(-1,dp(180)));content.addView(p);LinearLayout stats=panel();stats.addView(label("СОБРАНО ЗАПИСЕЙ",10,MUTED,true));stats.addView(label(String.valueOf(history.size()),28,TEXT,true));stats.addView(label("Новые точки появляются при изменении уровня заряда.",12,MUTED,false));content.addView(stats);TextView clear=label("Очистить историю",14,RED,true);clear.setPadding(dp(5),dp(12),0,dp(12));clear.setOnClickListener(v->{history.clear();saveHistory();buildPage();});content.addView(clear);}
+    void healthPage(){LinearLayout p=panel();p.addView(label("Состояние аккумулятора",21,TEXT,true));p.addView(label(healthText(),17,GREEN,true));p.addView(label("Android сообщает системный статус батареи. Это не лабораторная диагностика ёмкости.",12,MUTED,false));content.addView(p);LinearLayout grid=panel();grid.addView(infoLine("Системное здоровье",healthText()));grid.addView(infoLine("Температура",tempText()));grid.addView(infoLine("Технология",techText()));grid.addView(infoLine("Циклы зарядки",cycleText()));grid.addView(infoLine("Оценка износа","Недоступна без проектной ёмкости"));content.addView(grid);LinearLayout note=panel();note.addView(label("Почему нет процента износа?",16,TEXT,true));note.addView(label("Стандартный Android API не гарантирует доступ к заводской ёмкости батареи. Поэтому приложение не подменяет реальное измерение случайным процентом. На некоторых моделях доступны дополнительные данные производителя.",12,MUTED,false));content.addView(note);}
+    View infoLine(String a,String b){LinearLayout r=row();TextView x=label(a,13,MUTED,false);TextView y=label(b,13,TEXT,true);r.addView(x,new LinearLayout.LayoutParams(0,-2,1));r.addView(y);View line=new View(this);line.setBackgroundColor(0xff293342);LinearLayout wrap=column();wrap.addView(r);LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,dp(1));lp.topMargin=dp(12);lp.bottomMargin=dp(12);wrap.addView(line,lp);return wrap;}
+    void tipsPage(){LinearLayout p=panel();p.addView(label("Умные рекомендации",21,TEXT,true));String advice=advice();p.addView(label(advice,15,GREEN,true));p.addView(label("• Избегай длительного нагрева телефона.\n\n• Не оставляй устройство под прямым солнцем во время зарядки.\n\n• Используй качественный адаптер и кабель.\n\n• Если корпус заметно нагревается, дай телефону остыть.",13,MUTED,false));content.addView(p);LinearLayout n=panel();n.addView(label("Пороговые уведомления",16,TEXT,true));n.addView(label("В этой версии доступны визуальные предупреждения о высокой температуре и низком заряде. Фоновый контроль и системные уведомления добавим отдельным этапом, чтобы корректно запросить разрешения Android.",12,MUTED,false));content.addView(n);}
+    String statusText(){return batteryStatus==5?"Полностью заряжен":batteryStatus==2?"Идёт зарядка":batteryStatus==3?"Работает от батареи":"Ожидание";}
+    String tempText(){return temperature<0?"Нет данных":String.format(Locale.getDefault(),"%.1f",temperature/10f);}
+    String voltageText(){return millivolts<=0?"—":String.format(Locale.getDefault(),"%.2f",millivolts/1000f);}
+    String currentText(){return microamps==Integer.MIN_VALUE?"—":String.format(Locale.getDefault(),"%.0f",Math.abs(microamps)/1000f);}
+    String sourceText(){return plug==1?"Сеть":plug==2?"USB":plug==4?"Беспроводная":plug==8?"Док":"Нет";}
+    String healthText(){switch(healthCode){case 2:return "Хорошее";case 3:return "Перегрев";case 4:return "Неисправность";case 5:return "Перенапряжение";case 7:return "Переохлаждение";default:return "Нет данных";}}
+    String techText(){String s=batteryIntent==null?null:batteryIntent.getStringExtra(BatteryManager.EXTRA_TECHNOLOGY);return s==null||s.isEmpty()?"Неизвестно":s;}
+    String cycleText(){if(Build.VERSION.SDK_INT>=34&&batteryIntent!=null){int c=batteryIntent.getIntExtra("android.os.extra.CYCLE_COUNT",-1);return c>=0?String.valueOf(c):"Нет данных";}return "Требуется Android 14+";}
+    String advice(){if(temperature>=450)return "Высокая температура. Отключи зарядку и дай устройству остыть.";if(level<=15)return "Низкий заряд. Пора подключить зарядное устройство.";if(batteryStatus==2&&temperature>=400)return "Во время зарядки батарея заметно нагрелась.";if(batteryStatus==5)return "Заряд 100%. Можно отключить питание.";return "Показатели в обычном диапазоне. Продолжай наблюдение.";}
+    void readBattery(Intent i){int lev=i.getIntExtra(BatteryManager.EXTRA_LEVEL,-1),sc=i.getIntExtra(BatteryManager.EXTRA_SCALE,100);if(lev>=0&&sc>0)level=Math.round(lev*100f/sc);temperature=i.getIntExtra(BatteryManager.EXTRA_TEMPERATURE,-1);millivolts=i.getIntExtra(BatteryManager.EXTRA_VOLTAGE,-1);healthCode=i.getIntExtra(BatteryManager.EXTRA_HEALTH,1);plug=i.getIntExtra(BatteryManager.EXTRA_PLUGGED,0);batteryStatus=i.getIntExtra(BatteryManager.EXTRA_STATUS,1);microamps=bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW);if(history.isEmpty()||history.get(history.size()-1)!=level){history.add(level);while(history.size()>60)history.remove(0);saveHistory();}if(pct!=null){pct.setText(level+"%");status.setText(statusText());ring.invalidate();}if(eta!=null){long ms=Build.VERSION.SDK_INT>=28?bm.computeChargeTimeRemaining():-1;eta.setText(ms>0&&batteryStatus==2?"До полного заряда примерно "+formatTime(ms):" ");}if(page.equals("Обзор"))buildPage();}
+    String formatTime(long ms){long m=ms/60000;return (m/60)+" ч "+(m%60)+" мин";}
+    void loadHistory(){String s=prefs.getString("history","");if(!s.isEmpty())try{for(String x:s.split(","))history.add(Integer.parseInt(x));}catch(Exception e){history.clear();}}
+    void saveHistory(){StringBuilder b=new StringBuilder();for(int n:history){if(b.length()>0)b.append(",");b.append(n);}prefs.edit().putString("history",b.toString()).apply();}
+    @Override protected void onDestroy(){try{unregisterReceiver(receiver);}catch(Exception ignored){}super.onDestroy();}
+    class BatteryRing extends View{Paint p=new Paint(3);BatteryRing(){super(MainActivity.this);}protected void onDraw(Canvas c){float d=Math.min(getWidth(),getHeight()),cx=getWidth()/2f,cy=getHeight()/2f,r=d*.39f;p.setStyle(Paint.Style.STROKE);p.setStrokeWidth(dp(11));p.setStrokeCap(Paint.Cap.ROUND);p.setColor(0xff283241);c.drawArc(cx-r,cy-r,cx+r,cy+r,-90,360,false,p);p.setColor(level<=15?RED:GREEN);c.drawArc(cx-r,cy-r,cx+r,cy+r,-90,level*3.6f,false,p);p.setStyle(Paint.Style.FILL);p.setColor(0xff202a37);c.drawCircle(cx,cy,dp(5),p);}}
+    class HistoryChart extends View{Paint p=new Paint(3);HistoryChart(){super(MainActivity.this);}protected void onDraw(Canvas c){float w=getWidth(),h=getHeight(),left=dp(8),right=w-dp(8),top=dp(10),bottom=h-dp(20);p.setStrokeWidth(dp(1));p.setColor(0xff293342);for(int j=0;j<4;j++){float y=top+(bottom-top)*j/3f;c.drawLine(left,y,right,y,p);}if(history.size()<2){p.setColor(MUTED);p.setTextSize(dp(11));c.drawText("Собираем данные…",left,bottom-dp(8),p);return;}p.setColor(GREEN);p.setStrokeWidth(dp(2.5f));p.setStyle(Paint.Style.STROKE);Path path=new Path();for(int i=0;i<history.size();i++){float x=left+(right-left)*i/(float)(history.size()-1),y=bottom-(bottom-top)*history.get(i)/100f;if(i==0)path.moveTo(x,y);else path.lineTo(x,y);}c.drawPath(path,p);p.setStyle(Paint.Style.FILL);p.setColor(GREEN);float x=right,y=bottom-(bottom-top)*history.get(history.size()-1)/100f;c.drawCircle(x,y,dp(4),p);}}
 }
