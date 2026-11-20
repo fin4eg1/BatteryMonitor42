@@ -2,24 +2,7 @@ plugins { id 'com.android.application' }
 android {
     namespace 'ru.dmitry.batterymonitor42'
     compileSdk 35
-    signingConfigs {
-        stableDebug {
-            storeFile rootProject.file('battery42-debug.keystore')
-            storePassword 'android'
-            keyAlias 'battery42'
-            keyPassword 'android'
-        }
-    }
-    buildTypes {
-        debug {
-            signingConfig signingConfigs.stableDebug
-        }
-    }
-    defaultConfig {
-        applicationId 'ru.dmitry.batterymonitor42'
-        minSdk 23
-        targetSdk 35
-        versionCode 9
-        versionName '2.1'
-    }
+    signingConfigs { stableDebug { storeFile rootProject.file('battery42-debug.keystore'); storePassword 'android'; keyAlias 'battery42'; keyPassword 'android' } }
+    buildTypes { debug { signingConfig signingConfigs.stableDebug } }
+    defaultConfig { applicationId 'ru.dmitry.batterymonitor42'; minSdk 23; targetSdk 35; versionCode 10; versionName '2.2' }
 }
