@@ -4,5 +4,5 @@ android {
     compileSdk 35
     signingConfigs { stableDebug { storeFile rootProject.file('battery42-debug.keystore'); storePassword 'android'; keyAlias 'battery42'; keyPassword 'android' } }
     buildTypes { debug { signingConfig signingConfigs.stableDebug } }
-    defaultConfig { applicationId 'ru.dmitry.batterymonitor42'; minSdk 23; targetSdk 35; versionCode 22; versionName '4.4' }
+    defaultConfig { applicationId 'ru.dmitry.batterymonitor42'; minSdk 23; targetSdk 35; versionCode 23; versionName '4.4.1' }
 }
