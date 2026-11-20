@@ -2,8 +2,10 @@ name: Build Android APK
 on:
   workflow_dispatch:
   push:
-    branches: [ main, fix/v4.5-background-sampling
-      - fix/v4.5.1-history-migration ]
+    branches:
+      - main
+      - fix/v4.5-background-sampling
+      - fix/v4.5.1-history-migration
 jobs:
   build:
     runs-on: ubuntu-latest
