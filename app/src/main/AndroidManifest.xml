@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-feature android:name="android.hardware.sensor.battery" android:required="false"/>
     <application android:theme="@android:style/Theme.Material.NoActionBar" android:label="Батарея 42" android:usesCleartextTraffic="false">
         <activity android:name=".MainActivity" android:exported="true">
