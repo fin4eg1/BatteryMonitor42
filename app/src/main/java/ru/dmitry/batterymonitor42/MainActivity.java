@@ -271,7 +271,6 @@ public class MainActivity extends Activity {
             if(!saved){p.edit().putString("last_sample_error","Замер записан, но метаданные не обновлены").apply();return;}
             if(status==5||percent<=10||temp>=450)updateNotification("Аккумулятор: "+percent+"% · "+(temp<0?"—":(temp/10f)+" °C"));
             else updateNotification();
-            if(page.equals("Обзор")||page.equals("История"))runOnUiThread(()->recordSample());
         }
         void updateNotification(){updateNotification("Фоновый мониторинг аккумулятора");}
         void updateNotification(String text){((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).notify(43,buildNotification(text));}
