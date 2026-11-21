@@ -7,6 +7,7 @@ on:
       - fix/v4.5-background-sampling
       - fix/v4.5.1-history-migration
       - fix/v4.6-truthful-sampling
+      - fix/v4.7-archive-refactor
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -33,5 +34,5 @@ jobs:
         run: gradle assembleDebug
       - uses: actions/upload-artifact@v4
         with:
-          name: BatteryMonitor42-v4.6-debug-apk
+          name: BatteryMonitor42-v4.7-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
